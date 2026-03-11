@@ -164,7 +164,7 @@ if uploaded_file is not None:
             styled_df = styled_df.applymap(get_highlighter(0.001, 0.05), subset=country_cols)
             styled_df = styled_df.applymap(get_highlighter(0.0001, 0.01), subset=entity_cols)
             
-        st.dataframe(styled_df, height=400, use_container_width=True))
+        st.dataframe(styled_df, height=400, use_container_width=True)
 
         # --- 6. DATA-DRIVEN VARIANCE KPI BOXES (No AI used here) ---
         st.divider()
