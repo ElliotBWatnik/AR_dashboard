@@ -152,7 +152,22 @@ if uploaded_file is not None:
         st.divider()
         st.subheader("🤖 AI Performance Insights")
         api_key = st.text_input("Enter Gemini API Key to generate insights:", type="password")
-
+        
+        if st.button("Generate AI Insights"):
+            if not api_key:
+                st.warning("Please enter your Gemini API key.")
+            else:
+                try:
+                    genai.configure(api_key=api_key)
+                    st.success("API Key accepted! Here are the text models available to you:")
+                    
+                    # This lists every single model your key has access to
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            st.code(m.name)
+                            
+                except Exception as e:
+                    st.error(f"Error connecting to Google: {e}")
         
         if st.button("Generate AI Insights"):
             if not api_key:
