@@ -157,26 +157,10 @@ if uploaded_file is not None:
             if not api_key:
                 st.warning("Please enter your Gemini API key.")
             else:
-                try:
-                    genai.configure(api_key=api_key)
-                    st.success("API Key accepted! Here are the text models available to you:")
-                    
-                    # This lists every single model your key has access to
-                    for m in genai.list_models():
-                        if 'generateContent' in m.supported_generation_methods:
-                            st.code(m.name)
-                            
-                except Exception as e:
-                    st.error(f"Error connecting to Google: {e}")
-        
-        if st.button("Generate AI Insights"):
-            if not api_key:
-                st.warning("Please enter your Gemini API key.")
-            else:
                 with st.spinner("Gemini is analyzing the performance drivers..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-pro-latest')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
                         top_pos = merged.sort_values(by='GT_Total_Impact', ascending=False).head(3)
