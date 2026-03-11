@@ -130,8 +130,41 @@ if uploaded_file is not None:
         }, inplace=True)
         
         display_df = display_df.sort_values(by=['Entity', 'Country', 'First Payment Method'])
+        
+        # --- DYNAMIC COLOR HIGHLIGHTING ---
         format_dict = {col: "{:.2%}" for col in display_df.columns if 'AR' in col or 'Delta' in col or 'Impact' in col}
-        st.dataframe(display_df.style.format(format_dict), height=400, use_container_width=True)
+        
+        # Group columns by level
+        country_cols = [col for col in display_df.columns if '(Country)' in col or 'Delta' in col]
+        entity_cols = [col for col in display_df.columns if '(Entity)' in col]
+
+        # Factory function to generate highlighters with different thresholds and scales
+        def get_highlighter(threshold, max_scale):
+            def highlight(val):
+                if not isinstance(val, (int, float)) or pd.isna(val):
+                    return ''
+                if val >= threshold:
+                    intensity = min(val / max_scale, 1) 
+                    return f'background-color: rgba(39, 174, 96, {0.15 + (0.4 * intensity)}); color: #000000;'
+                elif val <= -threshold:
+                    intensity = min(abs(val) / max_scale, 1)
+                    return f'background-color: rgba(231, 76, 60, {0.15 + (0.4 * intensity)}); color: #000000;'
+                return ''
+            return highlight
+
+        # Apply formatting and the two different color maps
+        styled_df = display_df.style.format(format_dict)
+        
+        try:
+            # For Country & Delta cols: highlight > 0.1%, max intensity at 5% shift
+            styled_df = styled_df.map(get_highlighter(0.001, 0.05), subset=country_cols)
+            # For Entity cols: highlight > 0.01%, max intensity at 1% shift
+            styled_df = styled_df.map(get_highlighter(0.0001, 0.01), subset=entity_cols)
+        except AttributeError: # Fallback for slightly older Pandas versions
+            styled_df = styled_df.applymap(get_highlighter(0.001, 0.05), subset=country_cols)
+            styled_df = styled_df.applymap(get_highlighter(0.0001, 0.01), subset=entity_cols)
+            
+        st.dataframe(styled_df, height=400, use_container_width=True))
 
         # --- 6. DATA-DRIVEN VARIANCE KPI BOXES (No AI used here) ---
         st.divider()
