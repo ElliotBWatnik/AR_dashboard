@@ -160,7 +160,7 @@ if uploaded_file is not None:
                 with st.spinner("Gemini is analyzing the performance drivers..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
                         top_pos = merged.sort_values(by='GT_Total_Impact', ascending=False).head(3)
