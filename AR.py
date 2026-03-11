@@ -11,7 +11,7 @@ st.title("Acceptance Rate Performance Dashboard")
 uploaded_file = st.file_uploader("Upload your dataset (CSV or TSV)", type=['csv', 'tsv', 'txt'])
 
 if uploaded_file is not None:
-    # Try multiple encodings to handle Excel/System exports (fixes the 0xff error)
+    # Try multiple encodings to handle Excel/System exports
     encodings = ['utf-8', 'utf-16', 'latin1']
     df = None
     
@@ -61,41 +61,4 @@ if uploaded_file is not None:
 
     # --- 3. TREND CHART ---
     st.subheader(f"Monthly {metric_choice} Trend")
-    trend_df = df.groupby('Month')[['Order Count', 'Success Order Count', 'Recovery Order Count', 'Acceptance Orders']].sum().reset_index()
-    
-    trend_df['Success Rate'] = np.where(trend_df['Order Count'] > 0, trend_df['Success Order Count'] / trend_df['Order Count'], 0)
-    trend_df['Recovery Rate'] = np.where(trend_df['Order Count'] > 0, trend_df['Recovery Order Count'] / trend_df['Order Count'], 0)
-    trend_df['Acceptance Rate'] = np.where(trend_df['Order Count'] > 0, trend_df['Acceptance Orders'] / trend_df['Order Count'], 0)
-    
-    fig = px.line(trend_df, x='Month', y=metric_choice, markers=True)
-    fig.update_layout(yaxis_tickformat='.2%')
-    st.plotly_chart(fig, use_container_width=True)
-
-    # --- 4. ATTRIBUTION TABLE ---
-    st.subheader("Performance vs Last Month (Mix & Yield Attribution)")
-    months = sorted(df['Month'].unique())
-    
-    if len(months) >= 2:
-        curr_month = months[-1]
-        prev_month = months[-2]
-        st.write(f"**Comparing {curr_month} vs {prev_month}**")
-        
-        agg_cols = ['Order Count', 'Success Order Count', 'Recovery Order Count', 'Acceptance Orders']
-        df_curr = df[df['Month'] == curr_month].groupby(['data_source', 'Country', 'First Payment Method'])[agg_cols].sum().reset_index()
-        df_prev = df[df['Month'] == prev_month].groupby(['data_source', 'Country', 'First Payment Method'])[agg_cols].sum().reset_index()
-        
-        merged = pd.merge(df_curr, df_prev, on=['data_source', 'Country', 'First Payment Method'], suffixes=('_curr', '_prev'), how='outer').fillna(0)
-        
-        merged['AR_curr'] = np.where(merged['Order Count_curr'] > 0, merged['Acceptance Orders_curr'] / merged['Order Count_curr'], 0)
-        merged['AR_prev'] = np.where(merged['Order Count_prev'] > 0, merged['Acceptance Orders_prev'] / merged['Order Count_prev'], 0)
-        merged['MoM_Delta'] = merged['AR_curr'] - merged['AR_prev']
-        
-        merged['Country_Orders_curr'] = merged.groupby(['data_source', 'Country'])['Order Count_curr'].transform('sum')
-        merged['Country_Orders_prev'] = merged.groupby(['data_source', 'Country'])['Order Count_prev'].transform('sum')
-        merged['W_sub_curr'] = np.where(merged['Country_Orders_curr'] > 0, merged['Order Count_curr'] / merged['Country_Orders_curr'], 0)
-        merged['W_sub_prev'] = np.where(merged['Country_Orders_prev'] > 0, merged['Order Count_prev'] / merged['Country_Orders_prev'], 0)
-        
-        merged['GT_Orders_curr'] = merged.groupby('data_source')['Order Count_curr'].transform('sum')
-        merged['GT_Orders_prev'] = merged.groupby('data_source')['Order Count_prev'].transform('sum')
-        merged['W_gt_curr'] = np.where(merged['GT_Orders_curr'] > 0, merged['Order Count_curr'] / merged['GT_Orders_curr'], 0)
-        merged['W_gt_prev'] = np.where(merged['GT
+    trend_df = df.groupby
