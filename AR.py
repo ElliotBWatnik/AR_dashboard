@@ -19,44 +19,30 @@ if uploaded_file is not None:
         try:
             uploaded_file.seek(0)
             temp_df = pd.read_csv(uploaded_file, sep='\t', encoding=enc)
-            # If it didn't split into columns properly, try comma separation
             if len(temp_df.columns) < 5:
                 uploaded_file.seek(0)
                 temp_df = pd.read_csv(uploaded_file, encoding=enc)
             
             if len(temp_df.columns) >= 5:
                 df = temp_df
-                break  # We successfully read it!
+                break
         except Exception:
-            continue  # Catch ALL errors and try the next encoding
+            continue
             
     if df is None:
         st.error("🚨 Critical Error: Could not read the file. Please ensure it is a standard CSV or TSV.")
         st.stop()
-        
-    # --- 1.5 DEBUG PREVIEW ---
-    with st.expander("🔍 Click here to view raw data preview & columns"):
-        st.write(f"**Detected Columns:** {df.columns.tolist()}")
-        st.dataframe(df.head())
 
     # --- 2. DATA PREPARATION ---
     try:
-        # Standardize missing values
         df = df.fillna(0)
-        
-        # Ensure dates and numbers are the right format
         df['Order Date'] = pd.to_datetime(df['Order Date'])
         df['Month'] = df['Order Date'].dt.to_period('M').astype(str)
         
-        # Convert necessary columns to numeric just in case they loaded as text
         for col in ['Success Order Count', 'Recovery Order Count', 'Order Count']:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
         df['Acceptance Orders'] = df['Success Order Count'] + df['Recovery Order Count']
-        
-    except KeyError as e:
-        st.error(f"🚨 Missing Column Error: Your dataset is missing the column {e}. Please check the exact spelling in your file.")
-        st.stop()
     except Exception as e:
         st.error(f"🚨 Data Preparation Error: {e}")
         st.stop()
@@ -65,7 +51,6 @@ if uploaded_file is not None:
     st.sidebar.header("Filters")
     metric_choice = st.sidebar.selectbox("Select Metric for Trend Chart", ['Acceptance Rate', 'Success Rate', 'Recovery Rate'])
     
-    # Safely create filters (handles cases where columns might be missing or entirely NaN)
     try:
         if 'data_source' in df.columns:
             sources = ['All'] + list(df['data_source'].astype(str).unique())
@@ -147,52 +132,82 @@ if uploaded_file is not None:
         display_df = display_df.sort_values(by=['Entity', 'Country', 'First Payment Method'])
         format_dict = {col: "{:.2%}" for col in display_df.columns if 'AR' in col or 'Delta' in col or 'Impact' in col}
         st.dataframe(display_df.style.format(format_dict), height=400, use_container_width=True)
-        
-       # --- 6. GEMINI AI INTEGRATION ---
+
+        # --- 6. DATA-DRIVEN VARIANCE KPI BOXES (No AI used here) ---
         st.divider()
-        st.subheader("🤖 AI Performance Insights")
+        
+        # Calculate Grand Total values for the current filter view
+        total_orders_curr = merged['Order Count_curr'].sum()
+        total_orders_prev = merged['Order Count_prev'].sum()
+        
+        if total_orders_curr > 0 and total_orders_prev > 0:
+            total_ar_curr = merged['Acceptance Orders_curr'].sum() / total_orders_curr
+            total_ar_prev = merged['Acceptance Orders_prev'].sum() / total_orders_prev
+            total_delta = total_ar_curr - total_ar_prev
+            
+            # Mathematical Variance Decomposition
+            merged['W_total_curr'] = merged['Order Count_curr'] / total_orders_curr
+            merged['W_total_prev'] = merged['Order Count_prev'] / total_orders_prev
+            
+            total_mix_change = ((merged['W_total_curr'] - merged['W_total_prev']) * merged['AR_prev']).sum()
+            total_perf_change = (merged['W_total_curr'] * (merged['AR_curr'] - merged['AR_prev'])).sum()
+            
+            # Display Header
+            direction = "increased ⬆️" if total_delta >= 0 else "decreased ⬇️"
+            st.subheader(f"📊 Variance Analysis: AR {direction} by {abs(total_delta):.2%} MoM")
+            
+            # Display Side-by-Side KPI Boxes
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(label="Performance Change", value=f"{total_perf_change:+.2%}", help="Impact entirely due to AR going up/down")
+            with col2:
+                st.metric(label="Mix Change", value=f"{total_mix_change:+.2%}", help="Impact entirely due to volume shifting between payment methods")
+                
+        # --- 7. GEMINI AI TEXT SUMMARY ---
+        st.divider()
+        st.subheader("🤖 AI Executive Summary")
         api_key = st.text_input("Enter Gemini API Key to generate insights:", type="password")
         
         if st.button("Generate AI Insights"):
             if not api_key:
                 st.warning("Please enter your Gemini API key.")
             else:
-                with st.spinner("Gemini is analyzing the performance drivers..."):
+                with st.spinner("Gemini is reading the calculated data..."):
                     try:
                         genai.configure(api_key=api_key)
+                        
+                        # Use the model name from your diagnostic test here
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         
+                        # Grab the top contributing rows to feed the AI context
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
                         top_pos = merged.sort_values(by='GT_Total_Impact', ascending=False).head(3)
                         top_neg = merged.sort_values(by='GT_Total_Impact').head(3)
                         
-                        global_ar_curr = merged['Acceptance Orders_curr'].sum() / merged['Order Count_curr'].sum() if merged['Order Count_curr'].sum() else 0
-                        global_ar_prev = merged['Acceptance Orders_prev'].sum() / merged['Order Count_prev'].sum() if merged['Order Count_prev'].sum() else 0
-                        global_delta = global_ar_curr - global_ar_prev
-                        
                         prompt = f"""
                         You are a payments performance analyst. Review the following Month-over-Month payment acceptance rate data.
                         
-                        Context:
-                        - Global Acceptance rate shifted by {global_delta:.4%}.
+                        Overall Macro Data:
+                        - Total AR shifted by {total_delta:.4%}.
+                        - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4%}.
                         
-                        Top 3 Positive Drivers (helped the global rate):
+                        Top 3 Positive Drivers:
                         {top_pos[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
                         
-                        Top 3 Negative Drivers (dragged the global rate down):
+                        Top 3 Negative Drivers:
                         {top_neg[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
                         
                         Task:
-                        Write a concise, professional executive summary for leadership. 
-                        1. Provide a brief 2-sentence overview.
-                        2. Highlight the main positive and negative drivers, explaining if it was due to Mix (volume share shifting) or Rate (actual approval rate dropping/rising).
-                        3. Provide 3 actionable recommendations for the payments team to investigate.
-                        Keep the tone analytical and avoid fluff.
+                        Write an executive summary. 
+                        1. Provide a brief 2-sentence overview stating the overall change and acknowledging the split between Performance vs. Mix based on the data provided.
+                        2. Highlight the main positive and negative drivers.
+                        3. Provide 3 actionable recommendations for the payments team.
+                        Keep the tone strictly analytical and avoid fluff.
                         """
                         response = model.generate_content(prompt)
                         st.success("Analysis Complete!")
                         st.markdown(response.text)
                     except Exception as e:
-                        st.error(f"An error occurred with the AI generation: {e}")
+                        st.error(f"An AI error occurred: {e}")
     else:
         st.info("Please upload data with at least two distinct months to view MoM attribution.")
