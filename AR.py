@@ -138,17 +138,17 @@ if uploaded_file is not None:
         country_cols = [col for col in display_df.columns if '(Country)' in col or 'Delta' in col]
         entity_cols = [col for col in display_df.columns if '(Entity)' in col]
 
-        # Factory function to generate highlighters with different thresholds and scales
+       # Factory function to generate highlighters with different thresholds and scales
         def get_highlighter(threshold, max_scale):
             def highlight(val):
                 if not isinstance(val, (int, float)) or pd.isna(val):
                     return ''
                 if val >= threshold:
                     intensity = min(val / max_scale, 1) 
-                    return f'background-color: rgba(39, 174, 96, {0.15 + (0.4 * intensity)}); color: #000000;'
+                    return f'background-color: rgba(39, 174, 96, {0.15 + (0.4 * intensity)});'
                 elif val <= -threshold:
                     intensity = min(abs(val) / max_scale, 1)
-                    return f'background-color: rgba(231, 76, 60, {0.15 + (0.4 * intensity)}); color: #000000;'
+                    return f'background-color: rgba(231, 76, 60, {0.15 + (0.4 * intensity)});'
                 return ''
             return highlight
 
