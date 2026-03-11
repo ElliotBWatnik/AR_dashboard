@@ -148,10 +148,27 @@ if uploaded_file is not None:
         format_dict = {col: "{:.2%}" for col in display_df.columns if 'AR' in col or 'Delta' in col or 'Impact' in col}
         st.dataframe(display_df.style.format(format_dict), height=400, use_container_width=True)
         
-        # --- 6. GEMINI AI INTEGRATION ---
+       # --- 6. GEMINI AI INTEGRATION ---
         st.divider()
         st.subheader("🤖 AI Performance Insights")
         api_key = st.text_input("Enter Gemini API Key to generate insights:", type="password")
+        
+        if st.button("Generate AI Insights"):
+            if not api_key:
+                st.warning("Please enter your Gemini API key.")
+            else:
+                try:
+                    genai.configure(api_key=api_key)
+                    st.success("API Key accepted! Here are the text models available to you:")
+                    
+                    # This lists every single model your key has access to
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            st.code(m.name)
+                            
+                except Exception as e:
+                    st.error(f"Error connecting to Google: {e}")
+
         
         if st.button("Generate AI Insights"):
             if not api_key:
