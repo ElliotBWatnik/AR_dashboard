@@ -208,7 +208,7 @@ if uploaded_file is not None:
                 with st.spinner("Gemini is crunching the detailed data..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
                         # 1. Pre-calculate the Country-level summary for the AI
                         country_summary = merged.groupby('Country').agg({
