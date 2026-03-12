@@ -198,47 +198,72 @@ if uploaded_file is not None:
                 
         # --- 7. GEMINI AI TEXT SUMMARY ---
         st.divider()
-        st.subheader("🤖 AI Executive Summary")
+        st.subheader("🤖 Detailed AI Performance Analysis")
         api_key = st.text_input("Enter Gemini API Key to generate insights:", type="password")
         
-        if st.button("Generate AI Insights", key="ai_button"):
+        if st.button("Generate AI Analysis", key="ai_detailed_summary"):
             if not api_key:
                 st.warning("Please enter your Gemini API key.")
             else:
-                with st.spinner("Gemini is reading the calculated data..."):
+                with st.spinner("Gemini is crunching the detailed data..."):
                     try:
                         genai.configure(api_key=api_key)
-                        # Remember to update this to your specific model name if needed!
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         
+                        # 1. Pre-calculate the Country-level summary for the AI
+                        country_summary = merged.groupby('Country').agg({
+                            'Order Count_curr': 'sum',
+                            'Order Count_prev': 'sum',
+                            'Acceptance Orders_curr': 'sum',
+                            'Acceptance Orders_prev': 'sum',
+                            'Subtotal_Rate_Impact': 'sum',
+                            'Subtotal_Mix_Impact': 'sum'
+                        }).reset_index()
+                        
+                        country_summary['AR_curr'] = np.where(country_summary['Order Count_curr'] > 0, country_summary['Acceptance Orders_curr'] / country_summary['Order Count_curr'], 0)
+                        country_summary['AR_prev'] = np.where(country_summary['Order Count_prev'] > 0, country_summary['Acceptance Orders_prev'] / country_summary['Order Count_prev'], 0)
+                        country_summary['MoM_Delta'] = country_summary['AR_curr'] - country_summary['AR_prev']
+                        country_summary = country_summary.sort_values(by='MoM_Delta', ascending=False)
+                        
+                        # 2. Get the extreme PM drivers for Entity level
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
-                        top_pos = merged.sort_values(by='GT_Total_Impact', ascending=False).head(3)
-                        top_neg = merged.sort_values(by='GT_Total_Impact').head(3)
+                        top_drivers = merged.sort_values(by='GT_Total_Impact', ascending=False)
                         
                         prompt = f"""
-                        You are a payments performance analyst. Review the following Month-over-Month payment acceptance rate data.
+                        You are a highly analytical payments performance expert. Review the following Month-over-Month payment acceptance rate data.
                         
-                        Overall Macro Data:
+                        Overall Macro Data (Global Entity Level):
                         - Total AR shifted by {total_delta:.4%}.
                         - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4%}.
                         
-                        Top 3 Positive Drivers (Impact on Global Entity):
-                        {top_pos[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
+                        Country-Level Aggregated Data:
+                        {country_summary[['Country', 'AR_curr', 'MoM_Delta', 'Subtotal_Rate_Impact', 'Subtotal_Mix_Impact']].to_string(index=False)}
                         
-                        Top 3 Negative Drivers (Impact on Global Entity):
-                        {top_neg[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
+                        Top Payment Method Drivers (Largest Positive Impacts on Global Entity):
+                        {top_drivers[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(10).to_string(index=False)}
+                        
+                        Top Payment Method Drivers (Largest Negative Impacts on Global Entity):
+                        {top_drivers[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(10).to_string(index=False)}
                         
                         Task:
-                        Write an executive summary. 
-                        1. Provide a brief 2-sentence overview stating the overall change and acknowledging the split between Performance vs. Mix based on the data provided.
-                        2. Highlight the main positive and negative drivers.
-                        3. Provide 3 actionable recommendations for the payments team.
-                        Keep the tone strictly analytical and avoid fluff.
+                        Write a detailed analytical report following EXACTLY this structure:
+                        
+                        ### 🌍 Performance at a Country level
+                        - **Country Summary Table**: Create a Markdown table listing Country, Latest AR, MoM Delta, Rate Impact, and Mix Impact. Order it from largest MoM Delta increase to largest decrease. Use HTML `<span style="color:green">` for positive numbers and `<span style="color:red">` for negative numbers so they are color-coded in the dashboard.
+                        - **Rate Impact Drivers**: Highlight the biggest positive and negative drivers at the country level. Explicitly use the MoM AR of specific payment methods within those countries to explain *why* the country's rate changed.
+                        - **Mix Impact Drivers**: Highlight any large impacts caused purely by volume mix shifting between payment methods in individual countries.
+                        
+                        ### 🏢 Performance - Entity level
+                        - **Key Drivers**: Explain the biggest drivers of the *Global Entity* performance. Detail how specific countries and payment methods drove the overall AR changes and Mix changes. Be highly specific with the numbers provided.
+                        - **Actionable Recommendations**: Recommend 3-4 specific action items for the payments team to investigate based on the largest negative drivers or unusual mix shifts.
+                        
+                        Keep the tone highly professional, analytical, and data-dense. Avoid generic fluff.
                         """
                         response = model.generate_content(prompt)
                         st.success("Analysis Complete!")
-                        st.markdown(response.text)
+                        
+                        # unsafe_allow_html=True allows the AI to render the red/green text tags!
+                        st.markdown(response.text, unsafe_allow_html=True) 
+                        
                     except Exception as e:
                         st.error(f"An AI error occurred: {e}")
-    else:
-        st.info("Please upload data with at least two distinct months to view MoM attribution.")
