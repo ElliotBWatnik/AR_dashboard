@@ -238,42 +238,41 @@ if uploaded_file is not None:
                         td_prompt = top_drivers.copy()
                         for col in ['AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']:
                             td_prompt[col] = td_prompt[col].apply(lambda x: f"{x:.4%}")
-                        
+
+                        # Reduce data to Top 5 so the AI doesn't ramble
+                        top_pos_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(5)
+                        top_neg_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(5)
+
                         prompt = f"""
-                        You are a highly analytical payments performance expert. Review the following Month-over-Month payment acceptance rate data.
+                        You are a highly concise, executive-level payments analyst. Review the following Month-over-Month payment acceptance rate data.
                         
-                        Overall Macro Data (Global Entity Level):
-                        - Total AR shifted by {total_delta:.4%}.
-                        - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4%}.
+                        Macro Data (Global Entity):
+                        - Total AR Change: {total_delta:.4%} (Rate Impact: {total_perf_change:.4%}, Mix Impact: {total_mix_change:.4%})
                         
-                        Country-Level Aggregated Data:
+                        Country-Level Data:
                         {cs_prompt[['Country', 'AR_curr', 'MoM_Delta', 'Subtotal_Rate_Impact', 'Subtotal_Mix_Impact']].to_string(index=False)}
                         
-                        Top Payment Method Drivers (Largest Positive Impacts on Global Entity):
-                        {td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(10).to_string(index=False)}
+                        Top Payment Method Drivers (Global Impact):
+                        Positive:
+                        {top_pos_prompt.to_string(index=False)}
+                        Negative:
+                        {top_neg_prompt.to_string(index=False)}
                         
-                        Top Payment Method Drivers (Largest Negative Impacts on Global Entity):
-                        {td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(10).to_string(index=False)}
+                        Task: Write a strictly concise, punchy executive summary. No introductory fluff. Follow this EXACT structure:
                         
-                        Task:
-                        Write a detailed analytical report following EXACTLY this structure:
+                        ### 🌍 Country Performance Highlights
+                        - **Country Summary**: Create a Markdown table (Country | Latest AR | MoM Delta | Rate Impact | Mix Impact). Order by MoM Delta (Highest to Lowest). 
+                          CRITICAL HTML RULE: Wrap ONLY the numerical values in HTML color tags (`<span style="color:green">` for positive, `<span style="color:red">` for negative). NEVER color text/names. Include the % sign inside the tag. Example: | Hong Kong | 98.50% | <span style="color:green">+1.20%</span> |
+                        - **Top Rate Impact**: In exactly 1-2 sentences, name ONLY the single country with the largest positive/negative Rate Impact and state the specific Payment Method driving it.
+                        - **Top Mix Impact**: In exactly 1-2 sentences, name ONLY the single country with the largest Mix Impact and state the impact %.
                         
-                        ### 🌍 Performance at a Country level
-                        - **Country Summary Table**: Create a Markdown table listing Country, Latest AR, MoM Delta, Rate Impact, and Mix Impact. Order it from largest MoM Delta increase to largest decrease. 
-                          CRITICAL FORMATTING RULE: You must use HTML tags for colors, but ONLY apply them to the numbers themselves, NEVER to the text names. 
-                          Example of correct formatting: | Hong Kong | 98.50% | <span style="color:green">+1.20%</span> | <span style="color:red">-0.50%</span> |
-                        - **Rate Impact Drivers**: Highlight the biggest positive and negative drivers at the country level. Explicitly use the MoM AR of specific payment methods within those countries to explain *why* the country's rate changed.
-                        - **Mix Impact Drivers**: Highlight any large impacts caused purely by volume mix shifting between payment methods in individual countries.
+                        ### 🏢 Global Entity Performance
+                        - **Global Rate Drivers**: In exactly 1-2 sentences, identify the top 1-2 specific payment methods (with their country) that dragged down or boosted the global AR the most (using GT_Rate_Impact).
+                        - **Global Mix Drivers**: In exactly 1-2 sentences, identify the top 1-2 payment methods that caused the largest global volume shifts (using GT_Mix_Impact).
                         
-                        ### 🏢 Performance - Entity level
-                        - **Key Drivers**: Explain the biggest drivers of the *Global Entity* performance. Detail how specific countries and payment methods drove the overall AR changes and Mix changes. Be highly specific with the numbers provided.
-                        - **Actionable Recommendations**: Recommend 3-4 specific action items for the payments team to investigate based on the largest negative drivers or unusual mix shifts.
-                        
-                        Keep the tone highly professional, analytical, and data-dense. Avoid generic fluff.
+                        ### 🎯 Actionable Recommendations
+                        Provide exactly 3 bullet points. Each bullet must be 1 concise sentence focusing on a specific country/payment method to investigate based on the data.
                         """
-                        response = model.generate_content(prompt)
-                        st.success("Analysis Complete!")
-                        st.markdown(response.text, unsafe_allow_html=True)
                         
                     except Exception as e:
                         st.error(f"An AI error occurred: {e}")
