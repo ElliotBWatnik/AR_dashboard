@@ -259,7 +259,9 @@ if uploaded_file is not None:
                         Write a detailed analytical report following EXACTLY this structure:
                         
                         ### 🌍 Performance at a Country level
-                        - **Country Summary Table**: Create a Markdown table listing Country, Latest AR, MoM Delta, Rate Impact, and Mix Impact. Order it from largest MoM Delta increase to largest decrease. Use HTML `<span style="color:green">` for positive numbers and `<span style="color:red">` for negative numbers so they are color-coded in the dashboard. Ensure all numbers are written as percentages with 2 to 4 decimal places.
+                        - **Country Summary Table**: Create a Markdown table listing Country, Latest AR, MoM Delta, Rate Impact, and Mix Impact. Order it from largest MoM Delta increase to largest decrease. 
+                          CRITICAL FORMATTING RULE: You must use HTML tags for colors, but ONLY apply them to the numbers themselves, NEVER to the text names. 
+                          Example of correct formatting: | Hong Kong | 98.50% | <span style="color:green">+1.20%</span> | <span style="color:red">-0.50%</span> |
                         - **Rate Impact Drivers**: Highlight the biggest positive and negative drivers at the country level. Explicitly use the MoM AR of specific payment methods within those countries to explain *why* the country's rate changed.
                         - **Mix Impact Drivers**: Highlight any large impacts caused purely by volume mix shifting between payment methods in individual countries.
                         
