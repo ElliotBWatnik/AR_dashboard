@@ -208,7 +208,7 @@ if uploaded_file is not None:
                 with st.spinner("Gemini is crunching the detailed data..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-2.5-flash')
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         
                         # 1. Pre-calculate the Country-level summary for the AI
                         country_summary = merged.groupby('Country').agg({
@@ -225,7 +225,7 @@ if uploaded_file is not None:
                         country_summary['MoM_Delta'] = country_summary['AR_curr'] - country_summary['AR_prev']
                         country_summary = country_summary.sort_values(by='MoM_Delta', ascending=False)
                         
-                        # Format the Country data to % strings for the AI prompt
+                        # Format Country data to % strings
                         cs_prompt = country_summary.copy()
                         for col in ['AR_curr', 'MoM_Delta', 'Subtotal_Rate_Impact', 'Subtotal_Mix_Impact']:
                             cs_prompt[col] = cs_prompt[col].apply(lambda x: f"{x:.4%}")
@@ -234,12 +234,12 @@ if uploaded_file is not None:
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
                         top_drivers = merged.sort_values(by='GT_Total_Impact', ascending=False)
                         
-                        # Format the Driver data to % strings for the AI prompt
+                        # Format Driver data to % strings
                         td_prompt = top_drivers.copy()
                         for col in ['AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']:
                             td_prompt[col] = td_prompt[col].apply(lambda x: f"{x:.4%}")
-
-                        # Reduce data to Top 5 so the AI doesn't ramble
+                        
+                        # 3. Limit to top 5 to avoid overwhelming the prompt
                         top_pos_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(5)
                         top_neg_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(5)
 
@@ -274,5 +274,12 @@ if uploaded_file is not None:
                         Provide exactly 3 bullet points. Each bullet must be 1 concise sentence focusing on a specific country/payment method to investigate based on the data.
                         """
                         
+                        # Generate and display the response
+                        response = model.generate_content(prompt)
+                        st.success("Analysis Complete!")
+                        st.markdown(response.text, unsafe_allow_html=True)
+                        
                     except Exception as e:
                         st.error(f"An AI error occurred: {e}")
+    else:
+        st.info("Please upload data with at least two distinct months to view MoM attribution.")
