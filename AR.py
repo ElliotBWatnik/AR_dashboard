@@ -195,7 +195,6 @@ if uploaded_file is not None:
                 st.metric(label="Performance Change (Filtered View)", value=f"{total_perf_change:+.2%}", help="Impact entirely due to AR going up/down")
             with col2:
                 st.metric(label="Mix Change (Filtered View)", value=f"{total_mix_change:+.2%}", help="Impact entirely due to volume shifting")
-                
 # --- 7. GEMINI AI TEXT SUMMARY ---
         st.divider()
         st.subheader("🤖 Detailed AI Performance Analysis")
@@ -205,10 +204,10 @@ if uploaded_file is not None:
             if not api_key:
                 st.warning("Please enter your Gemini API key.")
             else:
-                with st.spinner("Gemini is crunching the detailed data..."):
+                with st.spinner("Gemini is searching for insights and anomalies..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-2.5-flash')
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         
                         # 1. Pre-calculate the Country-level summary for the AI
                         country_summary = merged.groupby('Country').agg({
@@ -239,12 +238,12 @@ if uploaded_file is not None:
                         for col in ['AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']:
                             td_prompt[col] = td_prompt[col].apply(lambda x: f"{x:.4%}")
                         
-                        # 3. Limit to top 5 to avoid overwhelming the prompt
-                        top_pos_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(5)
-                        top_neg_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(5)
+                        # 3. Expand the data window so the AI can find curious insights (Top 15 instead of Top 5)
+                        top_pos_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(15)
+                        top_neg_prompt = td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(15)
 
                         prompt = f"""
-                        You are a highly concise, executive-level payments analyst. Review the following Month-over-Month payment acceptance rate data.
+                        You are a Senior Payments Data Scientist providing an insightful, executive-level analysis of Month-over-Month (MoM) Acceptance Rate (AR) shifts. 
                         
                         Macro Data (Global Entity):
                         - Total AR Change: {total_delta:.4%} (Rate Impact: {total_perf_change:.4%}, Mix Impact: {total_mix_change:.4%})
@@ -252,26 +251,24 @@ if uploaded_file is not None:
                         Country-Level Data:
                         {cs_prompt[['Country', 'AR_curr', 'MoM_Delta', 'Subtotal_Rate_Impact', 'Subtotal_Mix_Impact']].to_string(index=False)}
                         
-                        Top Payment Method Drivers (Global Impact):
-                        Positive:
+                        Top Payment Method Drivers (Global Impact - Positive):
                         {top_pos_prompt.to_string(index=False)}
-                        Negative:
+                        
+                        Top Payment Method Drivers (Global Impact - Negative):
                         {top_neg_prompt.to_string(index=False)}
                         
-                        Task: Write a strictly concise, punchy executive summary. No introductory fluff. Follow this EXACT structure:
+                        Task: Write an insightful, analytical executive summary. Do not just regurgitate the largest numbers—connect the dots, find anomalies, and explain the "so what." Follow this EXACT structure:
                         
-                        ### 🌍 Country Performance Highlights
-                        - **Country Summary**: Create a Markdown table (Country | Latest AR | MoM Delta | Rate Impact | Mix Impact). Order by MoM Delta (Highest to Lowest). 
-                          CRITICAL HTML RULE: Wrap ONLY the numerical values in HTML color tags (`<span style="color:green">` for positive, `<span style="color:red">` for negative). NEVER color text/names. Include the % sign inside the tag. Example: | Hong Kong | 98.50% | <span style="color:green">+1.20%</span> |
-                        - **Top Rate Impact**: In exactly 1-2 sentences, name ONLY the single country with the largest positive/negative Rate Impact and state the specific Payment Method driving it.
-                        - **Top Mix Impact**: In exactly 1-2 sentences, name ONLY the single country with the largest Mix Impact and state the impact %.
+                        ### 🌍 Country Performance & Anomalies
+                        - **Country Summary**: Markdown table (Country | Latest AR | MoM Delta | Rate Impact | Mix Impact). Order by MoM Delta (Highest to Lowest). 
+                          CRITICAL HTML RULE: Wrap ONLY the numerical percentages in HTML color tags (`<span style="color:green">` for positive, `<span style="color:red">` for negative). NEVER color text/names. Include the % sign inside the tag.
+                        - **Insightful Country Trends**: In 3-4 sentences, go beyond the obvious. Point out interesting dynamics, such as a country where a severe Rate drop was completely offset by a positive Mix shift, or a country that is severely dragging down the global average due to a localized issue. 
                         
-                        ### 🏢 Global Entity Performance
-                        - **Global Rate Drivers**: In exactly 1-2 sentences, identify the top 1-2 specific payment methods (with their country) that dragged down or boosted the global AR the most (using GT_Rate_Impact).
-                        - **Global Mix Drivers**: In exactly 1-2 sentences, identify the top 1-2 payment methods that caused the largest global volume shifts (using GT_Mix_Impact).
+                        ### 🏢 Global Entity Drivers
+                        - **The Heavyweights**: In 3-4 sentences, identify the specific payment methods and countries that are truly moving the global needle. Look for curious findings—for example, did a payment method have a massive positive volume shift (Mix Impact) even though its actual approval rate dropped? Or did a highly successful payment method suddenly lose all its volume? Be specific.
                         
-                        ### 🎯 Actionable Recommendations
-                        Provide exactly 3 bullet points. Each bullet must be 1 concise sentence focusing on a specific country/payment method to investigate based on the data.
+                        ### 🎯 Strategic Recommendations
+                        Provide exactly 3 distinct, highly specific action items for the payments team. Base these on the most concerning anomalies, the largest negative rate drivers, or massive unexplained volume shifts observed in the data.
                         """
                         
                         # Generate and display the response
@@ -281,5 +278,3 @@ if uploaded_file is not None:
                         
                     except Exception as e:
                         st.error(f"An AI error occurred: {e}")
-    else:
-        st.info("Please upload data with at least two distinct months to view MoM attribution.")
