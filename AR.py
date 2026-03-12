@@ -57,6 +57,10 @@ if uploaded_file is not None:
             sel_source = st.sidebar.selectbox("Data Source", sources)
             if sel_source != 'All': df = df[df['data_source'] == sel_source]
             
+        # --- FIX: FREEZE THE UNFILTERED ENTITY DATA HERE ---
+        # This locks in the true global volume before we start slicing by country/PM
+        entity_df = df.copy()
+            
         if 'Country' in df.columns:
             countries = ['All'] + list(df['Country'].astype(str).unique())
             sel_country = st.sidebar.selectbox("Country", countries)
@@ -105,13 +109,19 @@ if uploaded_file is not None:
         merged['AR_prev'] = np.where(merged['Order Count_prev'] > 0, merged['Acceptance Orders_prev'] / merged['Order Count_prev'], 0)
         merged['MoM_Delta'] = merged['AR_curr'] - merged['AR_prev']
         
+        # Country Denominators (Dynamic based on filters)
         merged['Country_Orders_curr'] = merged.groupby(['data_source', 'Country'])['Order Count_curr'].transform('sum')
         merged['Country_Orders_prev'] = merged.groupby(['data_source', 'Country'])['Order Count_prev'].transform('sum')
         merged['W_sub_curr'] = np.where(merged['Country_Orders_curr'] > 0, merged['Order Count_curr'] / merged['Country_Orders_curr'], 0)
         merged['W_sub_prev'] = np.where(merged['Country_Orders_prev'] > 0, merged['Order Count_prev'] / merged['Country_Orders_prev'], 0)
         
-        merged['GT_Orders_curr'] = merged.groupby('data_source')['Order Count_curr'].transform('sum')
-        merged['GT_Orders_prev'] = merged.groupby('data_source')['Order Count_prev'].transform('sum')
+        # Entity Denominators (Locked into the unfiltered entity_df!)
+        entity_totals_curr = entity_df[entity_df['Month'] == curr_month].groupby('data_source')['Order Count'].sum().reset_index(name='GT_Orders_curr')
+        entity_totals_prev = entity_df[entity_df['Month'] == prev_month].groupby('data_source')['Order Count'].sum().reset_index(name='GT_Orders_prev')
+        
+        merged = pd.merge(merged, entity_totals_curr, on='data_source', how='left').fillna(0)
+        merged = pd.merge(merged, entity_totals_prev, on='data_source', how='left').fillna(0)
+        
         merged['W_gt_curr'] = np.where(merged['GT_Orders_curr'] > 0, merged['Order Count_curr'] / merged['GT_Orders_curr'], 0)
         merged['W_gt_prev'] = np.where(merged['GT_Orders_prev'] > 0, merged['Order Count_prev'] / merged['GT_Orders_prev'], 0)
         
@@ -134,11 +144,9 @@ if uploaded_file is not None:
         # --- DYNAMIC COLOR HIGHLIGHTING ---
         format_dict = {col: "{:.2%}" for col in display_df.columns if 'AR' in col or 'Delta' in col or 'Impact' in col}
         
-        # Group columns by level
         country_cols = [col for col in display_df.columns if '(Country)' in col or 'Delta' in col]
         entity_cols = [col for col in display_df.columns if '(Entity)' in col]
 
-       # Factory function to generate highlighters with different thresholds and scales
         def get_highlighter(threshold, max_scale):
             def highlight(val):
                 if not isinstance(val, (int, float)) or pd.isna(val):
@@ -152,24 +160,19 @@ if uploaded_file is not None:
                 return ''
             return highlight
 
-        # Apply formatting and the two different color maps
         styled_df = display_df.style.format(format_dict)
-        
         try:
-            # For Country & Delta cols: highlight > 0.1%, max intensity at 5% shift
             styled_df = styled_df.map(get_highlighter(0.001, 0.05), subset=country_cols)
-            # For Entity cols: highlight > 0.01%, max intensity at 1% shift
             styled_df = styled_df.map(get_highlighter(0.0001, 0.01), subset=entity_cols)
-        except AttributeError: # Fallback for slightly older Pandas versions
+        except AttributeError:
             styled_df = styled_df.applymap(get_highlighter(0.001, 0.05), subset=country_cols)
             styled_df = styled_df.applymap(get_highlighter(0.0001, 0.01), subset=entity_cols)
             
         st.dataframe(styled_df, height=400, use_container_width=True)
 
-        # --- 6. DATA-DRIVEN VARIANCE KPI BOXES (No AI used here) ---
+        # --- 6. DATA-DRIVEN VARIANCE KPI BOXES ---
         st.divider()
         
-        # Calculate Grand Total values for the current filter view
         total_orders_curr = merged['Order Count_curr'].sum()
         total_orders_prev = merged['Order Count_prev'].sum()
         
@@ -178,41 +181,36 @@ if uploaded_file is not None:
             total_ar_prev = merged['Acceptance Orders_prev'].sum() / total_orders_prev
             total_delta = total_ar_curr - total_ar_prev
             
-            # Mathematical Variance Decomposition
             merged['W_total_curr'] = merged['Order Count_curr'] / total_orders_curr
             merged['W_total_prev'] = merged['Order Count_prev'] / total_orders_prev
             
             total_mix_change = ((merged['W_total_curr'] - merged['W_total_prev']) * merged['AR_prev']).sum()
             total_perf_change = (merged['W_total_curr'] * (merged['AR_curr'] - merged['AR_prev'])).sum()
             
-            # Display Header
             direction = "increased ⬆️" if total_delta >= 0 else "decreased ⬇️"
             st.subheader(f"📊 Variance Analysis: AR {direction} by {abs(total_delta):.2%} MoM")
             
-            # Display Side-by-Side KPI Boxes
             col1, col2 = st.columns(2)
             with col1:
-                st.metric(label="Performance Change", value=f"{total_perf_change:+.2%}", help="Impact entirely due to AR going up/down")
+                st.metric(label="Performance Change (Filtered View)", value=f"{total_perf_change:+.2%}", help="Impact entirely due to AR going up/down")
             with col2:
-                st.metric(label="Mix Change", value=f"{total_mix_change:+.2%}", help="Impact entirely due to volume shifting between payment methods")
+                st.metric(label="Mix Change (Filtered View)", value=f"{total_mix_change:+.2%}", help="Impact entirely due to volume shifting")
                 
         # --- 7. GEMINI AI TEXT SUMMARY ---
         st.divider()
         st.subheader("🤖 AI Executive Summary")
         api_key = st.text_input("Enter Gemini API Key to generate insights:", type="password")
         
-        if st.button("Generate AI Insights"):
+        if st.button("Generate AI Insights", key="ai_button"):
             if not api_key:
                 st.warning("Please enter your Gemini API key.")
             else:
                 with st.spinner("Gemini is reading the calculated data..."):
                     try:
                         genai.configure(api_key=api_key)
-                        
-                        # Use the model name from your diagnostic test here
+                        # Remember to update this to your specific model name if needed!
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         
-                        # Grab the top contributing rows to feed the AI context
                         merged['GT_Total_Impact'] = merged['GT_Mix_Impact'] + merged['GT_Rate_Impact']
                         top_pos = merged.sort_values(by='GT_Total_Impact', ascending=False).head(3)
                         top_neg = merged.sort_values(by='GT_Total_Impact').head(3)
@@ -224,10 +222,10 @@ if uploaded_file is not None:
                         - Total AR shifted by {total_delta:.4%}.
                         - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4%}.
                         
-                        Top 3 Positive Drivers:
+                        Top 3 Positive Drivers (Impact on Global Entity):
                         {top_pos[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
                         
-                        Top 3 Negative Drivers:
+                        Top 3 Negative Drivers (Impact on Global Entity):
                         {top_neg[['Country', 'First Payment Method', 'GT_Mix_Impact', 'GT_Rate_Impact']].to_string()}
                         
                         Task:
