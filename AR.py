@@ -208,7 +208,7 @@ if uploaded_file is not None:
                 with st.spinner("Gemini is crunching the detailed data..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
                         # 1. Pre-calculate the Country-level summary for the AI
                         country_summary = merged.groupby('Country').agg({
@@ -244,4 +244,34 @@ if uploaded_file is not None:
                         
                         Overall Macro Data (Global Entity Level):
                         - Total AR shifted by {total_delta:.4%}.
-                        - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4
+                        - This was driven by a Performance rate shift of {total_perf_change:.4%} and a Mix/Volume shift of {total_mix_change:.4%}.
+                        
+                        Country-Level Aggregated Data:
+                        {cs_prompt[['Country', 'AR_curr', 'MoM_Delta', 'Subtotal_Rate_Impact', 'Subtotal_Mix_Impact']].to_string(index=False)}
+                        
+                        Top Payment Method Drivers (Largest Positive Impacts on Global Entity):
+                        {td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].head(10).to_string(index=False)}
+                        
+                        Top Payment Method Drivers (Largest Negative Impacts on Global Entity):
+                        {td_prompt[['Country', 'First Payment Method', 'AR_prev', 'AR_curr', 'MoM_Delta', 'GT_Rate_Impact', 'GT_Mix_Impact']].tail(10).to_string(index=False)}
+                        
+                        Task:
+                        Write a detailed analytical report following EXACTLY this structure:
+                        
+                        ### 🌍 Performance at a Country level
+                        - **Country Summary Table**: Create a Markdown table listing Country, Latest AR, MoM Delta, Rate Impact, and Mix Impact. Order it from largest MoM Delta increase to largest decrease. Use HTML `<span style="color:green">` for positive numbers and `<span style="color:red">` for negative numbers so they are color-coded in the dashboard. Ensure all numbers are written as percentages with 2 to 4 decimal places.
+                        - **Rate Impact Drivers**: Highlight the biggest positive and negative drivers at the country level. Explicitly use the MoM AR of specific payment methods within those countries to explain *why* the country's rate changed.
+                        - **Mix Impact Drivers**: Highlight any large impacts caused purely by volume mix shifting between payment methods in individual countries.
+                        
+                        ### 🏢 Performance - Entity level
+                        - **Key Drivers**: Explain the biggest drivers of the *Global Entity* performance. Detail how specific countries and payment methods drove the overall AR changes and Mix changes. Be highly specific with the numbers provided.
+                        - **Actionable Recommendations**: Recommend 3-4 specific action items for the payments team to investigate based on the largest negative drivers or unusual mix shifts.
+                        
+                        Keep the tone highly professional, analytical, and data-dense. Avoid generic fluff.
+                        """
+                        response = model.generate_content(prompt)
+                        st.success("Analysis Complete!")
+                        st.markdown(response.text, unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.error(f"An AI error occurred: {e}")
